@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>한 폭</title>
+<style>
+:root{--bg:#EEF0F3;--card:#FFFFFF;--ink:#16181C;--sub:#6B7280;--line:#DCE0E5;--on:#16181C;--onInk:#FFFFFF;--bezel:#121316}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#111214;--card:#1C1D21;--ink:#F2F3F5;--sub:#9AA0A8;--line:#2C2E33;--on:#F2F3F5;--onInk:#111214;--bezel:#000}}
+:root[data-theme="dark"]{--bg:#111214;--card:#1C1D21;--ink:#F2F3F5;--sub:#9AA0A8;--line:#2C2E33;--on:#F2F3F5;--onInk:#111214;--bezel:#000}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo","Noto Sans KR",sans-serif;display:flex;flex-direction:column;overflow:hidden}
+header{flex-shrink:0;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px 12px;padding:12px 16px 10px}
+.seg{display:flex;gap:4px;padding:4px;border-radius:12px;background:var(--card);border:1px solid var(--line);overflow-x:auto;max-width:100%}
+.seg button{flex-shrink:0;border:0;background:none;color:var(--sub);font:inherit;font-size:13px;font-weight:600;padding:7px 12px;border-radius:9px;cursor:pointer;white-space:nowrap}
+.seg button.on{background:var(--on);color:var(--onInk)}
+.seg button:disabled{opacity:.35;cursor:default}
+.sel,#art{font:inherit;font-size:13px;font-weight:600;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:12px;padding:9px 12px;max-width:260px}
+.info{width:100%;text-align:center;font-size:12px;color:var(--sub);font-variant-numeric:tabular-nums}
+.info b{color:var(--ink);font-weight:600}
+main{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:4px 16px 16px}
+.stage{position:relative}
+.dev{position:absolute;left:0;top:0;transform-origin:0 0;padding:var(--bz);border-radius:var(--r);background:#1B1E23;box-shadow:0 0 0 1px #31353C,0 40px 90px rgba(0,0,0,.55)} /* 기존 목업 색: 베젤 #1B1E23 + 테두리 #31353C */
+.pw{position:absolute;left:100%;top:22%;margin-left:3px;width:6px;height:64px;border:0;border-radius:0 4px 4px 0;background:#31353C;cursor:pointer;padding:0}
+.pw:hover{background:#4A4F57}
+.pw span{position:absolute;left:14px;top:50%;transform:translateY(-50%);white-space:nowrap;font-size:12px;color:var(--sub);pointer-events:none}
+.dev iframe{display:block;border:0;border-radius:calc(var(--r) - var(--bz));background:#000}
+</style>
+</head>
+<body>
+<header>
+  <div class="seg" id="devs"></div>
+  <div class="seg" id="sub"></div>
+  <select id="art" aria-label="잠금화면 그림"><option value="">그림: 순서대로</option></select>
+  <div class="info" id="info"></div>
+</header>
+<main id="main"><div class="stage" id="stage"><div class="dev" id="dev"><iframe id="fr" title="한 폭 프로토타입"></iframe></div><button class="pw" id="pw" aria-label="화면 켜기"><span>화면 켜기</span></button></div></main>
+<script>
+// 각 기기의 CSS 뷰포트(세로 기준). ~ 는 해상도와 기본 배율로 계산한 근사값
+const DEVICES = [
+  { k:'phone', name:'갤럭시', model:'Galaxy S26 Ultra', w:412, h:891, px:'1440×3120', bz:10, r:44 },
+  { k:'iphone', name:'아이폰', model:'iPhone 18 Pro', w:402, h:874, px:'1206×2622', bz:10, r:52 },
+  { k:'ipad',  name:'iPad',   model:'iPad Pro 13 (M5)', w:1032, h:1376, px:'2064×2752', bz:18, r:36, rotate:true },
+  { k:'tab',   name:'갤럭시탭', model:'Galaxy Tab S12 Ultra', w:924, h:1480, px:'1848×2960', bz:16, r:30, rotate:true, approx:true },
+  { k:'fold',  name:'갤럭시 폴드', model:'Galaxy Z Fold8', bz:12, r:30, approx:true, states:[
+      { k:'open', name:'펼침', w:750, h:832, px:'1968×2184 (8.0")' },
+      { k:'cover', name:'접힘 (커버)', w:411, h:960, px:'1080×2520 (6.5")' } ] }
+];
+const ls = { get(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }, set(k, v){ try { localStorage.setItem(k, v); } catch(e){} } };
+let cur = ls.get('hp.dev') || 'phone', orient = ls.get('hp.orient') || 'port', fstate = ls.get('hp.fold') || 'open';
+if (!DEVICES.find(d => d.k === cur)) cur = 'phone';
+const $ = id => document.getElementById(id);
+let loadedKey = '';
+
+function spec(){
+  const d = DEVICES.find(x => x.k === cur);
+  let s = d.states ? Object.assign({}, d, d.states.find(x => x.k === fstate) || d.states[0]) : Object.assign({}, d);
+  let w = s.w, h = s.h;
+  if (d.rotate && orient === 'land') [w, h] = [h, w];
+  return { d, s, w, h };
+}
+function render(){
+  const { d, s, w, h } = spec();
+  $('devs').innerHTML = DEVICES.map(x => `<button class="${x.k === cur ? 'on' : ''}" data-k="${x.k}">${x.name}</button>`).join('');
+  let sub = '';
+  if (d.states) sub = d.states.map(x => `<button class="${x.k === fstate ? 'on' : ''}" data-f="${x.k}">${x.name}</button>`).join('');
+  else sub = [['port','세로'],['land','가로']].map(([k, t]) => `<button class="${(d.rotate ? orient : 'port') === k ? 'on' : ''}" data-o="${k}" ${d.rotate ? '' : 'disabled'}>${t}</button>`).join('');
+  $('sub').innerHTML = sub;
+  $('info').innerHTML = `<b>${d.model}</b> · 뷰포트 ${d.approx ? '약 ' : ''}${w}×${h} · 해상도 ${s.px}`;
+  const dev = $('dev'), fr = $('fr');
+  dev.style.setProperty('--bz', d.bz + 'px'); dev.style.setProperty('--r', d.r + 'px');
+  fr.style.width = w + 'px'; fr.style.height = h + 'px';
+  const key = `${cur}-${w}x${h}`;
+  if (key !== loadedKey) { loadedKey = key; fr.src = 'app.html?app=1'; }
+  fit();
+}
+function fit(){
+  const { d, w, h } = spec();
+  const W = w + d.bz * 2, H = h + d.bz * 2, m = $('main');
+  const aw = m.clientWidth - 32 - 150, ah = m.clientHeight - 20; // 오른쪽 전원 버튼·라벨 자리
+  const k = Math.min(1, aw / W, ah / H);
+  $('dev').style.transform = `scale(${k})`;
+  $('stage').style.width = W * k + 'px'; $('stage').style.height = H * k + 'px';
+}
+// 그림 선택: 고른 그림을 잠금화면에 바로 띄워요 (기기를 바꿔도 유지)
+let artSel = ls.get('hp.art'); if (artSel === null) artSel = 'wmmon4e12b1';
+function fillArts(w){
+  const sel = $('art'); if (sel.options.length > 1) return;
+  try { (w.artList ? w.artList() : []).forEach(x => { const o = document.createElement('option'); o.value = x.id; o.textContent = `${x.a} · ${x.t}`; sel.appendChild(o); }); } catch(e){}
+  sel.value = artSel;
+}
+function applyArt(){ const w = $('fr').contentWindow; if (!w) return; fillArts(w); if (artSel) try { w.showArt && w.showArt(artSel); } catch(e){} }
+$('fr').addEventListener('load', () => setTimeout(applyArt, 400));
+$('art').addEventListener('change', e => { artSel = e.target.value; ls.set('hp.art', artSel); if (artSel) applyArt(); });
+// 전원 버튼: 앱 안의 powerBtn() 호출 (화면 끄고 다시 켜기 = 잠금화면)
+$('pw').addEventListener('click', e => { e.stopPropagation(); try { const w = $('fr').contentWindow; w.powerBtn && w.powerBtn(); } catch(err){} });
+document.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b || b.disabled) return;
+  if (b.dataset.k) { cur = b.dataset.k; ls.set('hp.dev', cur); }
+  if (b.dataset.o) { orient = b.dataset.o; ls.set('hp.orient', orient); }
+  if (b.dataset.f) { fstate = b.dataset.f; ls.set('hp.fold', fstate); }
+  render();
+});
+addEventListener('resize', fit);
+render();
+</script>
+</body>
+</html>
