@@ -3,3 +3,6 @@ build/
 local.properties
 android/app/src/main/assets/
 *.apk
+
+# 친구 공유용 설치 파일은 apk/ 폴더만 올려요
+!apk/*.apk
